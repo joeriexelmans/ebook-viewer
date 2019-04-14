@@ -31,7 +31,7 @@ class Viewer(WebKit.WebView):
 
         # Allow transparency so we can use GTK theme as background
         # Can be overridden by CSS background property, needs to be rgba(0,0,0,0)
-        self.set_transparent(True)
+        self.set_transparent(False)
 
         # Sets WebView settings for ebook display
         # No java script etc.

@@ -8,9 +8,10 @@ body{
 
 html * /* Sets those rules for every single html child element */
 {
-    color: #E0E0E0 !important;
+    color: #ffffff !important;
+    filter: invert(1);
     background-color: rgba(23,22,30,255) !important; /* transparent, GTK backgroun theme of wiget will show */
-    font-family: 'Roboto', sans-serif !important;
+    font-family: 'Roboto', sans-serif;
 }
 
 ::-moz-selection {

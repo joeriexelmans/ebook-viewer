@@ -195,12 +195,14 @@ class MainWindow(Gtk.ApplicationWindow):
                 chapter = self.current_chapter - 1
                 if chapter < 0:
                     return
+            else:
+                return
 
-            self.header_bar_component.select_chapter(chapter)
-            self.chapters_tree_component.select_chapter(chapter)
-            chapter_file = self.content_provider.get_chapter_file_path(chapter)
-            self.viewer.load_path(chapter_file)
-            self.current_chapter = chapter
+        self.header_bar_component.select_chapter(chapter)
+        self.chapters_tree_component.select_chapter(chapter)
+        chapter_file = self.content_provider.get_chapter_file_path(chapter)
+        self.viewer.load_path(chapter_file)
+        self.current_chapter = chapter
 
     def __update_night_day_style(self):
         """

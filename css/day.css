@@ -1,16 +1,16 @@
 body{
-    background-color: #FFF1C8 !important; /* transparent, GTK backgroun theme of wiget will show */
-    margin-right: 50px !important;
-    margin-left: 50px !important;
+    background-color: #FFF1C8; /* transparent, GTK backgroun theme of wiget will show */
+    margin-right: 10% !important;
+    margin-left: 10% !important;
     margin-top: 25px !important;
     margin-bottom: 75px !important;
 }
 
 html * /* Sets those rules for every single html child element */
 {
-    color: #000000 !important;
-    background-color: #FFF1C8 !important; /* transparent, GTK backgroun theme of wiget will show */
-    font-family: 'Roboto', sans-serif !important;
+    color: #000000;
+    background-color: #FFF1C8;
+    font-family: 'Roboto', sans-serif;
 }
 
 ::-moz-selection {
