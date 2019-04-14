@@ -1,24 +1,24 @@
 body{
-    background-color: rgba(0,0,0,0) !important; /* transparent, GTK backgroun theme of wiget will show */
+    background-color: #FFF1C8 !important; /* transparent, GTK backgroun theme of wiget will show */
     margin-right: 50px !important;
     margin-left: 50px !important;
     margin-top: 25px !important;
-    margin-bottom: 100px !important;
+    margin-bottom: 75px !important;
 }
 
 html * /* Sets those rules for every single html child element */
 {
-    color: #050505 !important;
-    font-family: 'Open Sans Regular', sans-serif !important;
-    background-color: rgba(0,0,0,0) !important;
+    color: #000000 !important;
+    background-color: #FFF1C8 !important; /* transparent, GTK backgroun theme of wiget will show */
+    font-family: 'Roboto', sans-serif !important;
 }
 
 ::-moz-selection {
-    background-color: #ffffad;
-    color: #000000;
+    background-color: #5E559A;
+    color: #ffffff;
 }
 
 ::selection {
-    background-color: #ffffad;
-    color: #000000;
+    background-color: #5E559A;
+    color: #ffffff;
 }

@@ -18,6 +18,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
+from gi.repository import GObject
 from components import file_chooser
 from components import about_dialog, preferences_dialog
 
@@ -183,24 +184,24 @@ class HeaderBarComponent(Gtk.HeaderBar):
             # Check if Gtk.Response is OK, means user selected file
             if response == Gtk.ResponseType.OK:
                 print("File selected: " + filename)  # Print selected file path to console
-                # Save current book data
-                self.__window.save_current_book_data()
                 # Load new book
-                self.__window.load_book_data(filename)
+                self.__window.load_book(filename)
 
     def __on_right_arrow_clicked(self, button):
         """
         Handles Right Arrow clicked navigation event, moves one chapter to the right
         :param button:
         """
-        self.__window.load_chapter(self.__window.content_provider.current_chapter + 1)
+        print(self.current_chapter)
+        self.__attempt_change_chapter(self.current_chapter + 1)
 
     def __on_left_arrow_clicked(self, button):
         """
         Handles Left Arrow clicked navigation event, moves one chapter to the left
         :param button:
         """
-        self.__window.load_chapter(self.__window.content_provider.current_chapter - 1)
+        print(self.current_chapter)
+        self.__attempt_change_chapter(self.current_chapter - 1)
 
     def __on_show_index_clicked(self, button):
         """
@@ -223,11 +224,8 @@ class HeaderBarComponent(Gtk.HeaderBar):
         if response == Gtk.ResponseType.OK:
             print("File selected: " + filename)  # Print selected file path to console
 
-            # Save current book data
-            self.__window.save_current_book_data()
-
             # Load new book
-            self.__window.load_book_data(filename)
+            self.__window.load_book(filename)
 
     def __on_activate_current_page_entry(self, wiget):
         """
@@ -236,26 +234,40 @@ class HeaderBarComponent(Gtk.HeaderBar):
         :param data:
         """
         try:
-            if self.__window.content_provider.chapter_count >= int(wiget.get_text()) - 1 >= 0:
-                self.__window.load_chapter(int(wiget.get_text()) - 1)
-            else:
-                self.current_page_entry.set_text(str(self.__window.content_provider.current_chapter + 1))
+            chapter_to_goto = int(wiget.get_text()) - 1
+            self.__attempt_change_chapter(chapter_to_goto)
         except ValueError:
-            self.current_page_entry.set_text(str(self.__window.content_provider.current_chapter + 1))
+            self.__attempt_change_chapter(-1) # this will reset the value in the box
+
+    def __attempt_change_chapter(self, chapter_to_goto):
+        if self.chapter_count > chapter_to_goto >= 0:
+            self.current_chapter = chapter_to_goto
+            self.current_page_entry.set_text(str(chapter_to_goto + 1))
+            self.left_arrow_button.set_sensitive(chapter_to_goto != 0)
+            self.right_arrow_button.set_sensitive(chapter_to_goto != self.chapter_count-1)
+            self.emit("chapter_changed", chapter_to_goto)
+            return True
+        else:
+            self.current_page_entry.set_text(str(self.current_chapter + 1))
+            return False
 
     def set_current_chapter(self, i):
         """
         Updates current chapter in entry if navigation came from somewhere else
         :param i:
         """
-        self.current_page_entry.set_text(str(i))
+        self.current_chapter = i
+        self.left_arrow_button.set_sensitive(i != 0)
+        self.right_arrow_button.set_sensitive(i != self.chapter_count-1)
+        self.current_page_entry.set_text(str(i+1))
 
-    def set_maximum_chapter(self, i):
+    def set_chapter_count(self, n):
         """
         Sets text of "maximum" chapter entry ie. of X
         :param i:
         """
-        self.number_pages_entry.set_placeholder_text(_("of %s") % (str(i)))
+        self.chapter_count = n
+        self.number_pages_entry.set_placeholder_text(_("of %s") % (str(n)))
 
     def show_jumping_navigation(self):
         """
@@ -269,21 +281,5 @@ class HeaderBarComponent(Gtk.HeaderBar):
         """
         self.pages_box.hide()
 
-    def enable_navigation(self):
-        """
-        Enables arrow based navigation, to use when book is loaded and in midsection
-        """
-        self.left_arrow_button.set_sensitive(True)
-        self.right_arrow_button.set_sensitive(True)
-
-    def disable_forward_navigation(self):
-        """
-        Disables navigation moving forward, to use when at the end of document
-        """
-        self.right_arrow_button.set_sensitive(False)
-
-    def disable_backward_navigation(self):
-        """
-        Disables navigation moving backward, to use when at the beginning of document
-        """
-        self.left_arrow_button.set_sensitive(False)
+GObject.type_register(HeaderBarComponent)
+GObject.signal_new("chapter_changed", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_INT])

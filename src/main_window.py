@@ -18,7 +18,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GObject
-from components import header_bar, viewer, chapters_list
+from components import header_bar, viewer, chapters_tree
 from workers import config_provider as config_provider_module, content_provider as content_provider_module
 import sys
 import os
@@ -56,12 +56,13 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # Creates and sets HeaderBarComponent that handles and populates Gtk.HeaderBar
         self.header_bar_component = header_bar.HeaderBarComponent(self)
+        self.header_bar_component.connect("chapter_changed", self.__on_header_bar_chapter_changed)
         self.set_titlebar(self.header_bar_component)
 
         # Prepares scollable window to host WebKit Viewer
         self.right_scrollable_window = Gtk.ScrolledWindow()
         self.right_scrollable_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.right_scrollable_window.get_vscrollbar().connect("show", self.__ajust_scroll_position)
+        # self.right_scrollable_window.get_vscrollbar().connect("show", self.__restore_scroll_position)
         self.right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.paned.pack2(self.right_box, True, True)  # Add to right panned
 
@@ -73,17 +74,19 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # Adds WebKit viewer component from Viewer component
 
-        self.viewer = viewer.Viewer(self)
+        self.viewer = viewer.Viewer(self, self.right_scrollable_window)
         print("Displaying blank page.")
         self.viewer.load_uri("about:blank")  # Display a blank page
-        self.viewer.connect("load-finished", self.__ajust_scroll_position)
-        self.viewer.connect("load-finished", self.__save_new_position)
+        # self.viewer.connect("load-finished", self.__on_viewer_load_finished)
+        self.viewer.connect("chapter_changed", self.__on_viewer_chapter_changed)
         self.right_box.pack_end(self.right_scrollable_window, True, True, 0)
         # Create Chapters List component and pack it on the left
-        self.chapters_list_component = chapters_list.ChaptersListComponent(self)
+        self.chapters_tree_component = chapters_tree.ChaptersTreeComponent(self)
+        self.chapters_tree_component.connect("chapter_changed", self.__on_treeview_chapter_changed)
 
         self.right_scrollable_window.add(self.viewer)
-        self.left_scrollable_window.add(self.chapters_list_component)
+
+        self.left_scrollable_window.add(self.chapters_tree_component)
 
         self.spinner = Gtk.Spinner()
         self.spinner.set_margin_top(50)
@@ -91,9 +94,6 @@ class MainWindow(Gtk.ApplicationWindow):
 
         # Update WebView and light / dark GTK style theme according to settings
         self.__update_night_day_style()
-
-        # No initial scroll offset
-        self.scroll_to_set = 0.0
 
         # Create context menu for right click
         self.menu = Gtk.Menu()
@@ -107,24 +107,18 @@ class MainWindow(Gtk.ApplicationWindow):
         self.book_loaded = False
         # If book came from arguments ie. was oppened using "Open with..." method etc.
         if file_path is not None:
-            # Save current book data
-            self.save_current_book_data()
             # Load new book
-            self.load_book_data(sys.argv[1])
+            self.load_book(sys.argv[1])
             self.book_loaded = True
         else:
-            # Try to load last book
-            self.__reload_previous_book()
+            # Reload last book
+            if "lastBook" in self.config_provider.config['Application']:
+                last_book_file = Path(self.config_provider.get_last_book())
+                if last_book_file.is_file():
+                    # Load new book
+                    self.load_book(self.config_provider.get_last_book())
+                    self.book_loaded = True
 
-    def __reload_previous_book(self):
-        if "lastBook" in self.config_provider.config['Application']:
-            last_book_file = Path(self.config_provider.get_last_book())
-            if last_book_file.is_file():
-                # Save current book data
-                self.save_current_book_data()
-                # Load new book
-                self.load_book_data(self.config_provider.get_last_book())
-                self.book_loaded = True
     @property
     def __scroll_position(self):
         """
@@ -133,25 +127,11 @@ class MainWindow(Gtk.ApplicationWindow):
         """
         return self.right_scrollable_window.get_vadjustment().get_value()
 
-    @property
-    def __get_saved_scroll(self):
-        """
-        Returns saved scroll position obtained from config provider
-        :return:
-        """
-        return float(self.config_provider.config[self.content_provider.book_md5]["position"])
-
     def __load_chapter_pos(self):
         """
         Return chapter position obtained from config provider
         """
         self.load_chapter(int(self.config_provider.config[self.content_provider.book_md5]["chapter"]))
-
-    def __load_scroll_pos(self):
-        """
-        Sets scroll offset to be loaded by Scrollable Window and WebView when they finish loading
-        """
-        self.scroll_to_set = self.__get_saved_scroll
 
     def __on_exit(self, window, data=None):
         """
@@ -159,41 +139,34 @@ class MainWindow(Gtk.ApplicationWindow):
         :param window:
         :param data:
         """
-        self.save_current_book_data()
 
-    def __ajust_scroll_position(self, widget, data):
-        """
-        Handles Scrollable Window and WebView loaded events and attempts to set scroll if scroll offset is loaded
-        :param widget:
-        :param data:
-        """
-        if self.scroll_to_set != 0.0:
-            self.right_scrollable_window.get_vadjustment().set_value(self.scroll_to_set)
-            if self.right_scrollable_window.get_vadjustment().get_value() != 0.0:
-                self.scroll_to_set = 0.0
+        # Save book data
+        if self.content_provider.status:
+            self.config_provider.save_chapter_position(self.content_provider.book_md5,
+                                                       self.current_chapter,
+                                                       self.__scroll_position)
 
-    def __save_new_position(self, wiget, data):
-        """
-        Saves new position in case new load came from link based navigation
-        :param wiget:
-        :param data:
-        """
-        if not data.get_uri() == "about:blank":
-            self.content_provider.set_data_from_uri(data.get_uri())
+    def __on_header_bar_chapter_changed(self, header_bar, chapter_number):
+        print("__on_header_bar_chapter_changed: ")
+        chapter_file = self.content_provider.get_chapter_file_path(chapter_number)
+        self.chapters_tree_component.set_current_chapter(chapter_number)
+        self.viewer.load_path(chapter_file)
+        self.current_chapter = chapter_number
 
-    def load_chapter(self, chapter):
-        """
-        Loads chapter and manages navigation UI accordingly
-        :param chapter:
-        """
-        if self.content_provider.chapter_count >= chapter >= 0:
-            self.content_provider.current_chapter = chapter
-            self.viewer.load_current_chapter()
-        self.header_bar_component.enable_navigation()
-        if chapter >= self.content_provider.chapter_count:
-            self.header_bar_component.disable_forward_navigation()
-        elif chapter <= 0:
-            self.header_bar_component.disable_backward_navigation()
+    def __on_treeview_chapter_changed(self, treeview, chapter_number, navpoint):
+        print("__on_treeview_chapter_changed: ")
+        chapter_file = self.content_provider.complete_chapter_file_path(navpoint.content)
+        self.header_bar_component.set_current_chapter(navpoint.file_number)
+        self.viewer.load_path(chapter_file)
+        self.current_chapter = navpoint.file_number
+
+    def __on_viewer_chapter_changed(self, viewer, uri):
+        if not uri == "about:blank":
+            print("__on_viewer_chapter_changed: " + uri)
+            chapter_number = self.content_provider.uri_to_chapter(uri)
+            self.header_bar_component.set_current_chapter(chapter_number)
+            self.chapters_tree_component.set_current_uri(uri)
+            self.current_chapter = chapter_number
 
     def __on_keypress_viewer(self, wiget, data):
         """
@@ -202,11 +175,22 @@ class MainWindow(Gtk.ApplicationWindow):
         :param data:
         """
         if self.content_provider.status:
+            chapter = -1
             key_value = Gdk.keyval_name(data.keyval)
             if key_value == "Right":
-                self.load_chapter(self.content_provider.current_chapter + 1)
+                chapter = self.current_chapter + 1
+                if chapter >= self.content_provider.chapter_count:
+                    return
             elif key_value == "Left":
-                self.load_chapter(self.content_provider.current_chapter - 1)
+                chapter = self.current_chapter - 1
+                if chapter < 0:
+                    return
+
+            self.header_bar_component.set_current_chapter(chapter)
+            self.chapters_tree_component.set_current_chapter(chapter)
+            chapter_file = self.content_provider.get_chapter_file_path(chapter)
+            self.viewer.load_path(chapter_file)
+            self.current_chapter = chapter
 
     def __update_night_day_style(self):
         """
@@ -252,22 +236,11 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def __check_on_work(self):
         if not self.job_running:
-            self.__continiue_book_loading("/tmp/easy-ebook-viewer-converted.epub")
+            self.__continue_book_loading("/tmp/easy-ebook-viewer-converted.epub")
             return 0
         return 1
 
-    def save_current_book_data(self):
-        """
-        Saves to book config current chapter and scroll position
-        """
-
-        # Save only if book was loaded before
-        if self.content_provider.status:
-            self.config_provider.save_chapter_position(self.content_provider.book_md5,
-                                                       self.content_provider.current_chapter,
-                                                       self.__scroll_position)
-
-    def __continiue_book_loading(self, filename):
+    def __continue_book_loading(self, filename):
         self.spinner.stop()
         self.viewer.show()
         self.right_box.remove(self.spinner)
@@ -276,29 +249,30 @@ class MainWindow(Gtk.ApplicationWindow):
             # If book loaded without errors
 
             # Update chapter list
-            self.chapters_list_component.reload_listbox()
+            self.chapters_tree_component.reload_treeview()
 
-            # Enable navigation
-            self.header_bar_component.enable_navigation()
+            # Load recent chapter and scroll
+            recent_chapter = int(self.config_provider.config[self.content_provider.book_md5]["chapter"])
+            recent_scroll = float(self.config_provider.config[self.content_provider.book_md5]["position"])
 
-            # Load chapter position
-            self.__load_chapter_pos()
+            recent_file = self.content_provider.files[recent_chapter]
+            recent_path = self.content_provider.complete_chapter_file_path(recent_file)
+
+            self.current_chapter = recent_chapter
+            self.header_bar_component.set_chapter_count(self.content_provider.chapter_count)
+            self.header_bar_component.set_current_chapter(recent_chapter)
+            self.chapters_tree_component.set_current_chapter(recent_chapter)
+            self.viewer.load_path(recent_path, recent_scroll)
+
 
             # Open book on viewer
-            self.viewer.load_current_chapter()
             self.header_bar_component.set_title(self.content_provider.book_name)
             self.header_bar_component.set_subtitle(self.content_provider.book_author)
-            # Load scroll offset
-            self.__load_scroll_pos()
-
-            # Set top bar max pages
-            self.header_bar_component.set_maximum_chapter(self.content_provider.chapter_count + 1)
 
             # Show to bar pages jumping navigation
             self.header_bar_component.show_jumping_navigation()
 
             self.config_provider.save_last_book(self.filename)
-
         else:
             # If book could not be loaded display dialog
             # TODO: Migrate to custom dialog designed in line with elementary OS Human Interface Guidelines
@@ -309,7 +283,7 @@ class MainWindow(Gtk.ApplicationWindow):
             error_dialog.run()
             error_dialog.destroy()
 
-    def load_book_data(self, filename):
+    def load_book(self, filename):
         """
         Loads book to Viwer and moves to correct chapter and scroll position
         :param filename:
@@ -324,7 +298,7 @@ class MainWindow(Gtk.ApplicationWindow):
             convert_thread.start()
             GObject.timeout_add(100, self.__check_on_work)
         else:
-            self.__continiue_book_loading(filename)
+            self.__continue_book_loading(filename)
 
     def show_menu(self):
         """

@@ -20,6 +20,7 @@ import os
 import shutil
 import urllib
 import zipfile
+import itertools
 
 from workers.xml2obj import *
 
@@ -37,6 +38,73 @@ from workers.xml2obj import *
 # Bonus: do bunch of other stuff like setting data based on uri, telling when book loaded etc.
 
 
+# Takes a 'navPoint' node (or a 'navMap' node) returned by xml2obj and recursivly constructs a hierarchy of NavPoints
+class NavPoint:
+    def __init__(self, files, node, prev_sibling=None):
+        self.files = files
+        if node.navLabel and node.content:
+            self.text = node.navLabel.text          # e.g.: "Chapter 8. Overlapping Input/Output"
+            self.content = node.content.src         # e.g.: "Text/ch15.html#part3"
+            self.file = self.content.split('#')[0]  # e.g.: "Text/ch15.html"
+            self.has_anchor = len(self.content.split('#')) > 1
+            self.file_number = self.files.index(self.file)
+        else:
+            self.text = "" # Only the root node ('navMap') does not have 'text' or 'content'
+
+        # The next part looks complex, and that's because it is...
+        #
+        # Some NCX files, even ones that have a hierarchy, still have navPoints that are siblings
+        # that really should be parent-children. Example:
+        #
+        #  - ch15.html
+        #  - ch15.html#part1
+        #  - ch15.html#part2
+        #  - ch16.html
+        #
+        # It looks really ugly in the navigation tree,
+        # so we use a heuristic to convert it to the following:
+        #
+        #  - ch15.html
+        #    - ch15.html#part1
+        #    - ch15.html#part2
+        #  - ch16.html
+        #
+        # I think the way it is done is safe and won't mess up the treeview in any case.
+        # If an epub's still looks bad it's really the epub's fault. Of course we can further
+        # attempt to improve the heuristic but that would also increase the chance of breaking things.
+
+        def shouldAddToPrevSibling(sibling, me):
+            if not sibling:
+                return False
+            if sibling.file != me.file:
+                return False
+            if sibling.has_anchor:
+                return False
+            return me.has_anchor
+
+        if shouldAddToPrevSibling(prev_sibling, self):
+            prev_sibling.children.append(self)
+
+        self.children = []
+        if node.navPoint:
+            prev_child = None
+            for child in node.navPoint:
+                new_child = NavPoint(self.files, child, prev_child)
+                if not shouldAddToPrevSibling(prev_child, new_child):
+                    self.children.append(new_child)
+                    prev_child = new_child
+
+    # This was useful when writing this class
+    def print(self):
+        self.__print_recursive(0)
+
+    def __print_recursive(self, spaces):
+        if self.text != "":
+            print(' '*spaces + str(self.file_number) + str(self.has_anchor) + ' ' + self.text)
+        # print(' '*spaces + self.content)
+        for navPoint in self.children:
+            navPoint.__print_recursive(spaces+2)
+
 class ContentProvider:
     def __init__(self, window):
 
@@ -51,8 +119,13 @@ class ContentProvider:
             os.mkdir(self.__cache_path)  # If not create it
         self.__ready = False
         self.book_name = ""
-        self.current_chapter = 0
-        self.titles = []
+
+        # The 'button' navigation in the header bar uses this. It is based on the 'spine' in the content.opf file
+        self.files = []
+        # The treeview navigation uses this. It is based on the NCX file.
+        self.index = None
+
+
 
     def prepare_book(self, file_path):
         """
@@ -123,7 +196,7 @@ class ContentProvider:
             self.__load_titles_and_files()
 
             # Validates files
-            self.__validate_files(metadata)
+            #self.__validate_files(metadata)
 
             # End of preparations
             self.__ready = True
@@ -197,70 +270,17 @@ class ContentProvider:
         """
         ncx_file_path = self.__get_ncx_file_path
         metadata = self.__get_metadata
-        __files = []
         self.chapter_links = []
         chapter_order = []
-        for x in metadata.manifest.item:
-            if x.media_type == "application/xhtml+xml":
-                __files.append(x.href)
+        for x in metadata.spine.itemref:
+            self.files.append([y.href for y in metadata.manifest.item if y.id == x.idref][0])
 
         self.titles = []
         if os.access(ncx_file_path, os.R_OK):  # Checks if NCX is accessible
             # Parse NCX file
-            # TODO: This could use complete rewrite based on xml2obj, it sort of works but God help it's bad
-            pat = re.compile('-(.*)-')
-            for line in open(ncx_file_path):
-                line = line.strip()
-                # Find text elements witch chapter titles
-                if "<text>" in line:
-                    out = self.find_between(line, '<text>', '</text>')
-                    self.titles.append(out)
-                # Find content elements witch chapter links
-                if "<content" in line:
-                    out = self.find_between(line, '<content src="', '"')
-                    self.chapter_links.append(out.split("#")[0])
-                # Find ordering elements of chapters
-                if "playOrder=" in line:
-                    out = self.find_between(line, 'playOrder="', '"')
-                    chapter_order.append(int(out))
-            chapter_order = functools.reduce(lambda l, x: l.append(x) or l if x not in l else l, chapter_order, [])
-            self.chapter_links = functools.reduce(lambda l, x: l.append(x) or l if x not in l else l,
-                                                  self.chapter_links, [])
-
-            # Remove unlinked chapter names, if there are more chapters then files it means
-            # chapters use filepath.html#chapter1 type of navigation
-            # TODO: Think of something better
-            while not len(self.titles) <= len(self.chapter_links):
-                self.titles.remove(self.titles[0])
-
-            # Sort chapter links according to order
-            if len(self.chapter_links) == len(chapter_order):
-                sorted_chapters = list(chapter_order)
-                sorted_chapters, self.chapter_links = (list(t) for t in
-                                                       zip(*sorted(zip(sorted_chapters, self.chapter_links))))
-
-            # Sort chapter names according to order
-            if len(chapter_order) == len(self.titles):
-                sorted_chapters = list(chapter_order)
-                sorted_chapters, self.titles = (list(t) for t in zip(*sorted(zip(sorted_chapters, self.titles))))
-
-            for i in range(len(self.titles)):
-                self.titles[i] = [self.titles[i], self.chapter_links[i]]
-
-            # If not all all files are chaptered append them
-            # chater_number = 1;
-            if len(__files) > len(self.chapter_links):
-                for i in range(len(__files)):
-                    if __files[i] not in self.chapter_links:
-                        self.chapter_links.insert(i, __files[i])
-                        # self.titles.insert(i, "Unnamed chapter" + " (" + str(chater_number) + ")")
-                        # chater_number += 1;
-
-            # Print some debug
-            print("Files: " + str(__files))
-            print("Chapters: " + str(self.chapter_links))
-            print("Names: " + str(self.titles))
-            print("Chapter count: " + str(self.chapter_count))
+            ncx_tree = xml2obj(open(ncx_file_path))
+            self.index = NavPoint(self.files, ncx_tree.navMap)
+            # self.index.print()
 
     def __validate_files(self, metadata):
         """
@@ -287,7 +307,7 @@ class ContentProvider:
         Returns number of chapters
         :return chapter number:
         """
-        return len(self.chapter_links) - 1
+        return len(self.files)
 
     @property
     def status(self):
@@ -297,25 +317,27 @@ class ContentProvider:
         """
         return self.__ready
 
-    def get_chapter_file(self, number):
+    def get_chapter_file_path(self, number):
         """
         Returns a chapter file to feed into viewer
         :param number:
         :return chapter file:
         """
-        return os.path.join(self.__cache_path, self.__oebps, self.chapter_links[number].split("#")[0])
+        return os.path.join(self.__cache_path, self.__oebps, self.files[number])
 
-    def set_data_from_uri(self, uri):
+
+    def complete_chapter_file_path(self, partial_file_path):
+        return os.path.join(self.__cache_path, self.__oebps, partial_file_path)
+
+    def uri_to_chapter(self, uri):
         """
         Based on chapter uri finds current chapter number and tells UI elements to update
         :param uri:
         """
-        for i in range(0, self.chapter_count + 1):
-            if urllib.parse.unquote((os.path.split(uri)[-1]).split("#")[0]) == os.path.split(self.chapter_links[i])[-1]:
-                self.current_chapter = i
-                self.__window.header_bar_component.set_current_chapter(i + 1)
-                self.__window.chapters_list_component.set_current_chapter(i + 1)
-                break
+        uri_without_anchor = uri.split('#')[0]
+        for i, filename in enumerate(self.files):
+            if uri_without_anchor.endswith(filename):
+                return i
 
     def find_between(self, s, first, last):
         """

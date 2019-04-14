@@ -17,11 +17,12 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit', '3.0')
+from gi.repository import GObject
 from gi.repository import WebKit
 
 
 class Viewer(WebKit.WebView):
-    def __init__(self, window):
+    def __init__(self, window, scrollable):
         """
         Provides Webkit WebView element to display ebook content
         :param window: Main application window reference, serves as communication hub
@@ -54,24 +55,26 @@ class Viewer(WebKit.WebView):
         settings.props.enable_html5_local_storage = False
 
         self.connect('context-menu', self.callback)
+        self.connect('load-finished', self.__on_load_finished)
+        self.ignore_next_load_finished_signal = False
+
+        self.scrollable = scrollable
+        self.scroll_to_set = None
 
         self.__window = window
 
-    def load_current_chapter(self):
-        """
-        Loads current chapter as pointed by content porvider
-        """
-        file_url = self.__window.content_provider.get_chapter_file(self.__window.content_provider.current_chapter)
-        # Using WebView.load_html_string since WebView.load_uri files for some html files
-        # while load_html_string works just fine
-        # It's a bug that needs to be resolved upstream
-
+    def load_path(self, path, scroll_to_set = None):
+        self.ignore_next_load_finished_signal = True
+        if scroll_to_set:
+            self.scroll_to_set = scroll_to_set
         try:
-            with open(file_url) as file_open:
-                self.load_html_string(file_open.read(), "file://" + file_url)
-                print("Loaded: " + file_url)
+            file = path.split('#')[0]
+            with open(file) as file_open:
+                self.load_html_string(file_open.read(), "file://" + path)
+                print("Loaded: " + path)
         except IOError:
-            print("Could not read: ", file_url)
+            print("Could not read: ", path)
+
 
     def set_style_day(self):
         """
@@ -91,3 +94,24 @@ class Viewer(WebKit.WebView):
 
     def callback(self, webview, context_menu, hit_result_event, event):
         self.__window.show_menu()
+
+    def __on_load_finished(self, webview, event):
+        # Currently disabled, wasn't stable:
+        #
+        # if self.scroll_to_set:
+        #     print("setting scroll")
+        #     old_adjustment = self.scrollable.get_vadjustment()
+        #     old_adjustment.set_value(float(self.scroll_to_set))
+        #     print("scroll set to")
+        #     print(old_adjustment.get_value())
+        #     # self.scrollable.set_vadjustment(old_adjustment)
+        #     self.scroll_to_set = None
+
+        if self.ignore_next_load_finished_signal:
+            self.ignore_next_load_finished_signal = False
+        else:
+            self.emit('chapter_changed', event.get_uri())
+
+
+GObject.type_register(Viewer)
+GObject.signal_new("chapter_changed", Viewer, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_STRING])
