@@ -192,16 +192,14 @@ class HeaderBarComponent(Gtk.HeaderBar):
         Handles Right Arrow clicked navigation event, moves one chapter to the right
         :param button:
         """
-        print(self.current_chapter)
-        self.__attempt_change_chapter(self.current_chapter + 1)
+        self.__attempt_change_chapter(self.selected_chapter + 1)
 
     def __on_left_arrow_clicked(self, button):
         """
         Handles Left Arrow clicked navigation event, moves one chapter to the left
         :param button:
         """
-        print(self.current_chapter)
-        self.__attempt_change_chapter(self.current_chapter - 1)
+        self.__attempt_change_chapter(self.selected_chapter - 1)
 
     def __on_show_index_clicked(self, button):
         """
@@ -227,39 +225,40 @@ class HeaderBarComponent(Gtk.HeaderBar):
             # Load new book
             self.__window.load_book(filename)
 
-    def __on_activate_current_page_entry(self, wiget):
+    def __on_activate_current_page_entry(self, widget):
         """
         Handles enter key on current page entry and validates what user set and loads that chapter
         :param wiget:
         :param data:
         """
         try:
-            chapter_to_goto = int(wiget.get_text()) - 1
-            self.__attempt_change_chapter(chapter_to_goto)
+            chapter_number = int(widget.get_text()) - 1
+            self.__attempt_change_chapter(chapter_number)
         except ValueError:
             self.__attempt_change_chapter(-1) # this will reset the value in the box
 
-    def __attempt_change_chapter(self, chapter_to_goto):
-        if self.chapter_count > chapter_to_goto >= 0:
-            self.current_chapter = chapter_to_goto
-            self.current_page_entry.set_text(str(chapter_to_goto + 1))
-            self.left_arrow_button.set_sensitive(chapter_to_goto != 0)
-            self.right_arrow_button.set_sensitive(chapter_to_goto != self.chapter_count-1)
-            self.emit("chapter_changed", chapter_to_goto)
+    def __attempt_change_chapter(self, chapter_number):
+        if self.chapter_count > chapter_number >= 0:
+            self.selected_chapter = chapter_number
+            self.current_page_entry.set_text(str(chapter_number + 1))
+            self.left_arrow_button.set_sensitive(chapter_number != 0)
+            self.right_arrow_button.set_sensitive(chapter_number != self.chapter_count-1)
+            self.emit("chapter_changed", chapter_number)
             return True
         else:
-            self.current_page_entry.set_text(str(self.current_chapter + 1))
+            self.current_page_entry.set_text(str(self.selected_chapter + 1))
             return False
 
-    def set_current_chapter(self, i):
+    # Updates the chapter in the bar. This will not cause a 'chapter_changed' signal to be emitted.
+    def select_chapter(self, chapter_number):
         """
         Updates current chapter in entry if navigation came from somewhere else
         :param i:
         """
-        self.current_chapter = i
-        self.left_arrow_button.set_sensitive(i != 0)
-        self.right_arrow_button.set_sensitive(i != self.chapter_count-1)
-        self.current_page_entry.set_text(str(i+1))
+        self.selected_chapter = chapter_number
+        self.left_arrow_button.set_sensitive(chapter_number != 0)
+        self.right_arrow_button.set_sensitive(chapter_number != self.chapter_count-1)
+        self.current_page_entry.set_text(str(chapter_number + 1))
 
     def set_chapter_count(self, n):
         """
@@ -281,5 +280,7 @@ class HeaderBarComponent(Gtk.HeaderBar):
         """
         self.pages_box.hide()
 
+# We register 1 custom type of signal for this class:
+# 'chapter_changed': emitted when the user choose a different chapter in the header bar.
 GObject.type_register(HeaderBarComponent)
 GObject.signal_new("chapter_changed", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_INT])

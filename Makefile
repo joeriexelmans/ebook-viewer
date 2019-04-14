@@ -31,7 +31,7 @@ install-bin: easy-ebook-viewer
 	install -m 644 src/components/header_bar.py ${EBOOKVIEWER_DIR}/components/header_bar.py
 	install -m 644 src/components/viewer.py ${EBOOKVIEWER_DIR}/components/viewer.py
 	install -m 644 src/components/about_dialog.py ${EBOOKVIEWER_DIR}/components/about_dialog.py
-	install -m 644 src/components/chapters_list.py ${EBOOKVIEWER_DIR}/components/chapters_list.py
+	install -m 644 src/components/chapters_tree.py ${EBOOKVIEWER_DIR}/components/chapters_tree.py
 	install -m 644 src/components/preferences_dialog.py ${EBOOKVIEWER_DIR}/components/preferences_dialog.py
 	install -m 644 src/constants.py ${EBOOKVIEWER_DIR}/constants.py
 	install -m 644 src/workers/__init__.py ${EBOOKVIEWER_DIR}/workers/__init__.py

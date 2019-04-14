@@ -63,6 +63,7 @@ class Viewer(WebKit.WebView):
 
         self.__window = window
 
+    # Load a file in the view. Will not cause a 'chapter_changed' event to be emitted.
     def load_path(self, path, scroll_to_set = None):
         self.ignore_next_load_finished_signal = True
         if scroll_to_set:
@@ -112,6 +113,6 @@ class Viewer(WebKit.WebView):
         else:
             self.emit('chapter_changed', event.get_uri())
 
-
+# The 'chapter_changed' signal is emitted when the user navigated to a different page by clicking on a link.
 GObject.type_register(Viewer)
 GObject.signal_new("chapter_changed", Viewer, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_STRING])

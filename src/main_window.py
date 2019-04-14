@@ -81,7 +81,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.viewer.connect("chapter_changed", self.__on_viewer_chapter_changed)
         self.right_box.pack_end(self.right_scrollable_window, True, True, 0)
         # Create Chapters List component and pack it on the left
-        self.chapters_tree_component = chapters_tree.ChaptersTreeComponent(self)
+        self.chapters_tree_component = chapters_tree.ChaptersTreeComponent()
         self.chapters_tree_component.connect("chapter_changed", self.__on_treeview_chapter_changed)
 
         self.right_scrollable_window.add(self.viewer)
@@ -146,26 +146,36 @@ class MainWindow(Gtk.ApplicationWindow):
                                                        self.current_chapter,
                                                        self.__scroll_position)
 
+    # There are 4 ways a navigation action can be initiated:
+    #
+    #  1. The ChaptersTreeComponent emitting a 'chapter_changed' event
+    #      -> when the user selects a different chapter
+    #  2. The HeaderBarComponent emitting a 'chapter_changed' event
+    #      -> when the left/right button is clicked in the header bar, or
+    #      -> when a new chapter number is entered followed by 'enter'
+    #  3. The Viewer emitting a 'chapter_changed' event
+    #      -> when the user clicks a link
+    #  4. By pressing the Left/Right arrow keys on the keyboard
+    #
+    # The handlers for those events are below:
+
     def __on_header_bar_chapter_changed(self, header_bar, chapter_number):
-        print("__on_header_bar_chapter_changed: ")
         chapter_file = self.content_provider.get_chapter_file_path(chapter_number)
-        self.chapters_tree_component.set_current_chapter(chapter_number)
+        self.chapters_tree_component.select_chapter(chapter_number)
         self.viewer.load_path(chapter_file)
         self.current_chapter = chapter_number
 
     def __on_treeview_chapter_changed(self, treeview, chapter_number, navpoint):
-        print("__on_treeview_chapter_changed: ")
         chapter_file = self.content_provider.complete_chapter_file_path(navpoint.content)
-        self.header_bar_component.set_current_chapter(navpoint.file_number)
+        self.header_bar_component.select_chapter(navpoint.file_number)
         self.viewer.load_path(chapter_file)
         self.current_chapter = navpoint.file_number
 
     def __on_viewer_chapter_changed(self, viewer, uri):
         if not uri == "about:blank":
-            print("__on_viewer_chapter_changed: " + uri)
             chapter_number = self.content_provider.uri_to_chapter(uri)
-            self.header_bar_component.set_current_chapter(chapter_number)
-            self.chapters_tree_component.set_current_uri(uri)
+            self.header_bar_component.select_chapter(chapter_number)
+            self.chapters_tree_component.select_uri(uri)
             self.current_chapter = chapter_number
 
     def __on_keypress_viewer(self, wiget, data):
@@ -186,8 +196,8 @@ class MainWindow(Gtk.ApplicationWindow):
                 if chapter < 0:
                     return
 
-            self.header_bar_component.set_current_chapter(chapter)
-            self.chapters_tree_component.set_current_chapter(chapter)
+            self.header_bar_component.select_chapter(chapter)
+            self.chapters_tree_component.select_chapter(chapter)
             chapter_file = self.content_provider.get_chapter_file_path(chapter)
             self.viewer.load_path(chapter_file)
             self.current_chapter = chapter
@@ -249,7 +259,7 @@ class MainWindow(Gtk.ApplicationWindow):
             # If book loaded without errors
 
             # Update chapter list
-            self.chapters_tree_component.reload_treeview()
+            self.chapters_tree_component.reload_treeview(self.content_provider.index)
 
             # Load recent chapter and scroll
             recent_chapter = int(self.config_provider.config[self.content_provider.book_md5]["chapter"])
@@ -260,10 +270,9 @@ class MainWindow(Gtk.ApplicationWindow):
 
             self.current_chapter = recent_chapter
             self.header_bar_component.set_chapter_count(self.content_provider.chapter_count)
-            self.header_bar_component.set_current_chapter(recent_chapter)
-            self.chapters_tree_component.set_current_chapter(recent_chapter)
+            self.header_bar_component.select_chapter(recent_chapter)
+            self.chapters_tree_component.select_chapter(recent_chapter)
             self.viewer.load_path(recent_path, recent_scroll)
-
 
             # Open book on viewer
             self.header_bar_component.set_title(self.content_provider.book_name)

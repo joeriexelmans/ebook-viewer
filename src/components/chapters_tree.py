@@ -22,96 +22,80 @@ from gi.repository import GObject
 
 
 class ChaptersTreeComponent(Gtk.TreeView):
-    def __init__(self, window):
+    def __init__(self):
         """
         Provides the List Box with chapters index and navigation based around them
         :param window: Main application window reference, serves as communication hub
         """
         super(Gtk.TreeView, self).__init__()
-        self.__window = window
 
         model = Gtk.TreeStore(GObject.TYPE_STRING, GObject.TYPE_PYOBJECT)
         self.set_model(model)
         selection = self.get_selection()
         # Only one chapter can be selected at a time
         selection.set_mode(Gtk.SelectionMode.SINGLE)
-        
         selection.connect('changed', self.__on_selection_changed)
         self.ignore_next_selection_signal = False
 
-        self.file_number_to_iter = {}
-        self.file_anchor_to_iter = {}
+        # Helpers for finding the right Treeiter by chapter number and chapter anchor
+        self.chapter_number_to_iter = {}
+        self.chapter_anchor_to_iter = {}
 
         self.append_column(Gtk.TreeViewColumn("Navigation", Gtk.CellRendererText(), text=0))
 
 
-    def __populate_treeview(self):
-        """
-        Fills List Box with chapter titles
-        """
-        for child in self.__window.content_provider.index.children:
-            self.__populate_recursive(child, None)
-        self.show_all()
-
-    def __populate_recursive(self, navpoint, parent_treeiter):
-        model = self.get_model()
-        treeiter = model.append(parent_treeiter, [navpoint.text, navpoint])
-        self.file_anchor_to_iter[navpoint.content] = treeiter
-        if navpoint.file_number not in self.file_number_to_iter:
-            self.file_number_to_iter[navpoint.file_number] = treeiter
-        for child in navpoint.children:
-            self.__populate_recursive(child, treeiter)
-
-    def __on_selection_changed(self, selection):
-        if self.ignore_next_selection_signal:
-            self.ignore_next_selection_signal = False
-            return
-
-        print("selection changed signal left panel")
-        model, paths = selection.get_selected_rows()
-        if len(paths) == 1:
-            path = paths[0]
-            navpoint = model.get_value(model.get_iter(path), 1)
-            self.emit("chapter_changed", navpoint.file_number, navpoint)
-
-    def reload_treeview(self):
+    def reload_treeview(self, index):
         """
         Reloads all List Box element by first removing them and then calling __populate_treeview()
         """
         children = self.get_children()
         for element in children:
             self.remove(element)
-        self.__populate_treeview()
 
-    def set_current_uri(self, uri):
-        print("set_current_uri:"+uri)
+        for child in index.children:
+            self.__populate_recursive(child, None)
+        self.show_all()
+
+    def __populate_recursive(self, navpoint, parent_treeiter):
+        model = self.get_model()
+        treeiter = model.append(parent_treeiter, [navpoint.text, navpoint])
+        self.chapter_anchor_to_iter[navpoint.content] = treeiter
+        if navpoint.file_number not in self.chapter_number_to_iter:
+            self.chapter_number_to_iter[navpoint.file_number] = treeiter
+        for child in navpoint.children:
+            self.__populate_recursive(child, treeiter)
+
+    # Check if an item for the given URI is present and select it.
+    # If no such item exists, the selection will be cleared.
+    # No 'chapter_changed' signal will be emitted as a result of this call.
+    def select_uri(self, uri):
         found = False
-        for file_anchor in self.file_anchor_to_iter:
-            print(file_anchor)
-            if uri.endswith(file_anchor):
-                self.__set_selection(self.file_anchor_to_iter[file_anchor])
+        for chapter_anchor in self.chapter_anchor_to_iter:
+            if uri.endswith(chapter_anchor):
+                self.__set_selection(self.chapter_anchor_to_iter[chapter_anchor])
                 found = True
                 break
         if not found:
-            print("not found")
             self.__set_selection(None)
 
 
-    def set_current_chapter(self, chapter):
+    # Check if an item for the given chapter number is present and select it.
+    # If no such item exists, the selection will be cleared.
+    # No 'chapter_changed' signal will be emitted as a result of this call.
+    def select_chapter(self, chapter_number):
         """
         Called during navigation sets current chapter based on reader position
         :param chapter: integer with chapter number
         """
-        # Change the selection. This does not cause a selection 'changed' signal.
-
-        self.ignore_next_selection_signal = True
-
-        if chapter in self.file_number_to_iter:
-            treeiter = self.file_number_to_iter[chapter]
+        if chapter_number in self.chapter_number_to_iter:
+            treeiter = self.chapter_number_to_iter[chapter_number]
             self.__set_selection(treeiter)
         else:
             self.__set_selection(None)
 
+    # Helper for setting the selection.
+    # Expands the items in the view such that the selected item is visible,
+    # and makes sure that we don't respond to the selection 'changed' signal by emitting a 'chapter_changed'
     def __set_selection(self, treeiter):
         self.ignore_next_selection_signal = True
 
@@ -124,5 +108,19 @@ class ChaptersTreeComponent(Gtk.TreeView):
         else:
             self.get_selection().unselect_all()
 
+    # Handler for selection changed signal
+    def __on_selection_changed(self, selection):
+        if self.ignore_next_selection_signal:
+            self.ignore_next_selection_signal = False
+            return
+
+        model, paths = selection.get_selected_rows()
+        if len(paths) == 1:
+            path = paths[0]
+            navpoint = model.get_value(model.get_iter(path), 1)
+            self.emit("chapter_changed", navpoint.file_number, navpoint)
+
+# Register a signal for our component
+# The 'chapter_changed' signal is emitted as the result of a user clicking on an item in the view
 GObject.type_register(ChaptersTreeComponent)
 GObject.signal_new("chapter_changed", ChaptersTreeComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_INT, GObject.TYPE_PYOBJECT])
