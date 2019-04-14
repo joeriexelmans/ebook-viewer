@@ -1,54 +1,30 @@
-## I do not develop this anymore and I'm not sure I will. Stop starring me.
-As far as I know [Bookworm](https://github.com/babluboy/bookworm) does everything better anyway. And this thing suffers from terrible home baked parsing engine. Or just consider more up to date fork. 
+This is a fork from the now-dead project https://github.com/michaldaniel/ebook-viewer
 
+# Why this fork?
 
+Even in the light of the awful code quality of the original application, I liked the simplicity of the interface a lot. No other Linux EPUB reader could beat it, in my opinion.
+ - Some readers have too many features (like a "book library" in Calibre and Bookworm).
+ - Others are completely outdated or have an ugly, difficult to use interface (FBreader)
 
-![Icon](https://cloud.githubusercontent.com/assets/1345297/18609855/7f6c13b2-7d0c-11e6-9fc7-0a23a251d2ea.png)
+# Changes made
 
-# easy-ebook-viewer
-Modern GTK Python app to easily read ePub files
+ - Chapter data is correctly shown in a tree view (as opposed to a list view). Evidence:
 
-Ebook Viewer is currently in early stages of development. It's a re-write of old ebook reader called [pPub.](https://github.com/sakisds/pPub)
+![Icon](https://i.imgur.com/0Q1O3qj.png)
 
-Planned for first public release:
-- [x] ePub opening & display
-- [x] Basic chapter navigation
-- [x] Restoring of reading position
-- [x] Importing from other ebook file formats
-- [x] Chapter jumping
-- [x] Chapter index based navigation
-- [ ] Per book bookmarks
-- [x] Switching between light and dark style
-- [ ] Text size control
-- [ ] eBook font picker
+ - Overall improvement of code quality (more cohesion and less coupling and all that). But still pretty bad.
+ - CSS background set to non-transparent. The transparent background didn't work if your GTK theme doesn't have a 'light' and a 'dark' version. So the CSS for 'day' and 'night' has been edited to have a non-transparent background.
+ - CSS left and right margins are proportional to the width of the view. This gives a nicer result in my opinion.
+ - Removed restoring the 'scroll' after restarting the application. I could not get this to work in a stable way. So now after restarting, the same book and chapter are shown, but the view will be at the top of the page again.
 
-Enormous rendering improvement is on the way too.
+Tested with a bunch of EPUBs.
 
-Future plans:
-- [ ] Native non-DRM mobi support
-- [ ] Native txt support
-- [ ] Native html support
-- [ ] Content searching
-- [ ] Pernament highlighting
-- [ ] Book metadata display
-- [ ] Ability to edit book metadata
+The result is quite a usable minimal application that I use myself for reading EPUBs on my computer.
 
-## Installing
+Further "planned" improvements (but no promises here)
+ - Remove functionality for opening MOBI files (it's implemented by secretly starting another converter program in the background, this is just cheating!!)
+ - There's "import" and "open", no idea what the difference is, I've never imported anything, I'm only interested in opening.
+ - Port to WebKitGTK 2 (shouldn't be too hard)
+ - Throw everything away and build from scratch in Haskell
 
-**Requires**: gir1.2-webkit-3.0, libwebkitgtk-3.0-0, gir1.2-gtk-3.0, python3-gi (PyGObject for Python 3), python3-xdg
-
-Download or clone this repository then run in project directory:
-
-```sudo make install```
-
-Note the lack of configure step so make sure you have all dependencies.
-
-## Screenshots
-
-Dark theme
-
-![Dark theme](https://cloud.githubusercontent.com/assets/1345297/19221520/4357d038-8e45-11e6-849b-d83a9fe496ba.png)
-
-Light theme
-
-![Light theme](https://cloud.githubusercontent.com/assets/1345297/19221521/43b2f698-8e45-11e6-839c-e9c41ab0aea6.png)
+Also, pull requests welcome :-)
