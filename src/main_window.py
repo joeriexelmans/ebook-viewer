@@ -18,7 +18,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GObject
-from components import header_bar, viewer, chapters_tree
+from components import header_bar, viewer, chapters_tree, about_dialog, file_chooser, preferences_dialog
 from workers import config_provider as config_provider_module, content_provider as content_provider_module
 import sys
 import os
@@ -33,7 +33,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_default_size(800, 800)
         self.connect("destroy", self.__on_exit)
         self.connect("key-press-event", self.__on_keypress_viewer)
-        self.job_running = False
 
         # Use panned to display book on the right and toggle chapter & bookmarks on the left
         self.paned = Gtk.Paned.new(Gtk.Orientation.HORIZONTAL)
@@ -57,6 +56,10 @@ class MainWindow(Gtk.ApplicationWindow):
         # Creates and sets HeaderBarComponent that handles and populates Gtk.HeaderBar
         self.header_bar_component = header_bar.HeaderBarComponent(self)
         self.header_bar_component.connect("chapter_changed", self.__on_header_bar_chapter_changed)
+        self.header_bar_component.connect("open_clicked", self.__on_open_clicked)
+        self.header_bar_component.connect("navigation_toggled", self.__on_navigation_toggled)
+        self.header_bar_component.connect("preferences_clicked", self.__on_preferences_clicked)
+        self.header_bar_component.connect("about_clicked", self.__on_about_clicked)
         self.set_titlebar(self.header_bar_component)
 
         # Prepares scollable window to host WebKit Viewer
@@ -69,17 +72,14 @@ class MainWindow(Gtk.ApplicationWindow):
         # Prepares scollable window to host Chapters and Bookmarks
         self.left_scrollable_window = Gtk.ScrolledWindow()
         self.left_scrollable_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        # Don't show it after startup ie. don't pack it to self.panned
-        self.is_paned_visible = False;
 
         # Adds WebKit viewer component from Viewer component
-
         self.viewer = viewer.Viewer(self, self.right_scrollable_window)
         print("Displaying blank page.")
         self.viewer.load_uri("about:blank")  # Display a blank page
-        # self.viewer.connect("load-finished", self.__on_viewer_load_finished)
         self.viewer.connect("chapter_changed", self.__on_viewer_chapter_changed)
         self.right_box.pack_end(self.right_scrollable_window, True, True, 0)
+
         # Create Chapters List component and pack it on the left
         self.chapters_tree_component = chapters_tree.ChaptersTreeComponent()
         self.chapters_tree_component.connect("chapter_changed", self.__on_treeview_chapter_changed)
@@ -204,6 +204,30 @@ class MainWindow(Gtk.ApplicationWindow):
         self.viewer.load_path(chapter_file)
         self.current_chapter = chapter
 
+    def __on_open_clicked(self, widget):
+        # Loads file chooser component
+        file_chooser_window = file_chooser.FileChooserWindow()
+        (response, filename) = file_chooser_window.show_dialog()
+
+        if response == Gtk.ResponseType.OK:
+            print("File selected: " + filename)
+            self.load_book(filename)
+
+    def __on_navigation_toggled(self, widget, is_active):
+        if is_active:
+            self.paned.pack1(self.left_scrollable_window, False, False)  # Add to right panned
+            self.paned.show_all()
+        else:
+            self.paned.remove(self.left_scrollable_window)
+            self.paned.show_all()
+
+    def __on_about_clicked(self, widget):
+        about_dialog.show_dialog(self)
+
+    def __on_preferences_clicked(self, widget):
+        dialog = preferences_dialog.PreferencesDialog()
+        dialog.show_dialog(self)
+
     def __update_night_day_style(self):
         """
         Sets GTK theme and Viwer CSS according to application settings
@@ -227,32 +251,15 @@ class MainWindow(Gtk.ApplicationWindow):
         # Can get selection from anywhere in the system, no real way to tell
         selection_clipboard.set_text(primary_selection.wait_for_text(), -1)
 
-    def __show_left_paned(self):
+    def load_book(self, filename):
         """
-        Shows left paned panel
+        Loads book to Viwer and moves to correct chapter and scroll position
+        :param filename:
         """
-        self.paned.pack1(self.left_scrollable_window, False, False)  # Add to right panned
-        self.paned.show_all()
-
-    def __remove_left_paned(self):
-        """
-        Hides left paned panel
-        """
-        self.paned.remove(self.left_scrollable_window)
-        self.paned.show_all()
-
-    def __bg_import_book(self, filename):
+        self.spinner.start()
+        self.viewer.hide()
+        self.right_box.add(self.spinner)
         self.filename = filename
-        os.system("ebook-convert \"" + filename + "\" /tmp/easy-ebook-viewer-converted.epub --pretty-print")
-        self.job_running = False
-
-    def __check_on_work(self):
-        if not self.job_running:
-            self.__continue_book_loading("/tmp/easy-ebook-viewer-converted.epub")
-            return 0
-        return 1
-
-    def __continue_book_loading(self, filename):
         self.spinner.stop()
         self.viewer.show()
         self.right_box.remove(self.spinner)
@@ -281,7 +288,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.header_bar_component.set_subtitle(self.content_provider.book_author)
 
             # Show to bar pages jumping navigation
-            self.header_bar_component.show_jumping_navigation()
+            self.header_bar_component.hide_jumping_navigation()
 
             self.config_provider.save_last_book(self.filename)
         else:
@@ -294,37 +301,9 @@ class MainWindow(Gtk.ApplicationWindow):
             error_dialog.run()
             error_dialog.destroy()
 
-    def load_book(self, filename):
-        """
-        Loads book to Viwer and moves to correct chapter and scroll position
-        :param filename:
-        """
-        self.spinner.start()
-        self.viewer.hide()
-        self.right_box.add(self.spinner)
-        self.filename = filename
-        if not filename.upper().endswith(tuple(constants.NATIVE)):
-            convert_thread = threading.Thread(target=self.__bg_import_book, args=(filename,))
-            self.job_running = True
-            convert_thread.start()
-            GObject.timeout_add(100, self.__check_on_work)
-        else:
-            self.__continue_book_loading(filename)
-
     def show_menu(self):
         """
         Displays right click context menu
         """
         if self.content_provider.status:
             self.menu.popup(None, None, None, None, 0, Gtk.get_current_event_time())
-
-    def toggle_left_paned(self):
-        """
-        Shows and hides left paned panel depending on it's current state
-        """
-        if self.is_paned_visible:
-            self.__remove_left_paned()
-            self.is_paned_visible = False
-        else:
-            self.__show_left_paned()
-            self.is_paned_visible = True

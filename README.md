@@ -2,13 +2,15 @@ This is a fork from the now-dead project https://github.com/michaldaniel/ebook-v
 
 # Why this fork?
 
-Even in the light of the awful code quality of the original application, I liked the simplicity of the interface a lot. No other Linux EPUB reader could beat it, in my opinion.
- - Some readers have too many features (like a "book library" in Calibre and Bookworm).
- - Others are completely outdated or have an ugly, difficult to use interface (FBreader)
+What I liked about the original application is the simplicity of the interface. An EPUB is just a ordered list of HTML files and the original application just displayed those files and let you navigate between them with a side panel. Other Linux EPUB readers typically try to do too much and get "in the way":
+ - In Calibre, there's no way to just open a file and read it. You have to import it into your library, as a result the file actually gets copied to another folder, etc.
+ - Bookworm is simpler but there is no way to show the book and navigation at the same time. Also, too many animations.
+ - FBreader is outdated (hasn't seen development in like 10 years) and also, no navigation panel.
+ - It looks like Evince (GNOME's PDF reader) is getting simple EPUB support along the lines of this application. But it doesn't quite look 'finished' and I don't want to dive in the codebase of an application that has been around for so long.
 
 # Changes made
 
- - Chapter data is correctly shown in a tree view (as opposed to a list view). Evidence:
+ - Chapter data is correctly parsed from the EPUB and is shown in a tree view (as opposed to a list view). Evidence:
 
 ![Icon](https://i.imgur.com/0Q1O3qj.png)
 
@@ -27,4 +29,4 @@ Further "planned" improvements (but no promises here)
  - Port to WebKitGTK 2 (shouldn't be too hard)
  - Throw everything away and build from scratch in Haskell
 
-Also, pull requests welcome :-)
+Also, pull requests welcome, as long as you maintain the perspective of keeping the application really simple and minimal.

@@ -19,8 +19,6 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 from gi.repository import GObject
-from components import file_chooser
-from components import about_dialog, preferences_dialog
 
 
 class HeaderBarComponent(Gtk.HeaderBar):
@@ -35,11 +33,6 @@ class HeaderBarComponent(Gtk.HeaderBar):
         self.props.title = _("Easy eBook Viewer")
         self.__window = window
         self.__menu = Gtk.Menu()
-        # Fill it with all the wigets
-        self.__populate_headerbar()
-        self.job_running = False
-
-    def __populate_headerbar(self):
 
         """
         Adds all default Header Bar content and connects handlers
@@ -49,7 +42,7 @@ class HeaderBarComponent(Gtk.HeaderBar):
         self.open_button = Gtk.Button()
         document_open_image = Gtk.Image.new_from_icon_name("document-open-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
         self.open_button.add(document_open_image)
-        self.open_button.connect("clicked", self.__on_open_clicked)
+        self.open_button.connect("clicked", lambda button: self.emit('open_clicked'))
         self.pack_start(self.open_button)
 
         # Adds linked Gtk.Box to host chapter navigation Entries
@@ -105,32 +98,17 @@ class HeaderBarComponent(Gtk.HeaderBar):
         self.show_index_button = Gtk.ToggleButton()
         index_icon = Gtk.Image.new_from_icon_name("view-list-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
         self.show_index_button.add(index_icon)
-        self.show_index_button.connect("clicked", self.__on_show_index_clicked)
+        self.show_index_button.connect("toggled", lambda button: self.emit('navigation_toggled', button.get_active()))
         self.pack_start(self.show_index_button)
 
         # Adds Preferences context settings menu item
         preferences_menu_item = Gtk.MenuItem(_("Preferences"))
-        preferences_menu_item.connect("activate", self.__on_preferences_menu_item_clicked)
+        preferences_menu_item.connect("activate", lambda item: self.emit("preferences_clicked"))
         self.__menu.append(preferences_menu_item)
-
-        # Adds Preferences context settings menu item
-        import_menu_item = Gtk.MenuItem.new_with_label(_("Import book..."))
-        import_menu_item.connect("activate", self.__on_import_menu_item_clicked)
-        self.__menu.append(import_menu_item)
-
-        # Adds Preferences context settings menu item
-        #import_menu_item = Gtk.MenuItem(_("Import book..."))
-        #import_menu_item.connect("activate", self.__on_import_menu_item_clicked)
-        #self.__menu.append(import_menu_item)
-
-        if not os.path.exists("/usr/bin/ebook-convert"):
-            children = import_menu_item.get_children()
-            for element in children:
-                element.set_sensitive(False)
 
         # Adds About context settings menu item
         about_menu_item = Gtk.MenuItem(_("About"))
-        about_menu_item.connect("activate", self.__on_about_menu_item_clicked)
+        about_menu_item.connect("activate", lambda item: self.emit("about_clicked"))
         self.__menu.append(about_menu_item)
 
         self.__menu.show_all()
@@ -142,50 +120,12 @@ class HeaderBarComponent(Gtk.HeaderBar):
         self.properties_button.connect("clicked", self.__on_properties_clicked)
         self.pack_end(self.properties_button)
 
-    def __on_about_menu_item_clicked(self, widget):
-        """
-        Handles About context menu item clicked event, displays manu popup
-        :param widget:
-        """
-        dialog = about_dialog.AboutDialog()
-        dialog.show_dialog
-
-    def __on_preferences_menu_item_clicked(self, widget):
-        """
-        Handles About context menu item clicked event, displays manu popup
-        :param widget:
-        """
-        dialog = preferences_dialog.PreferencesDialog()
-        dialog.show_dialog(self.__window)
-
     def __on_properties_clicked(self, button):
         """
         Handles settings button clicked event and displays context menu
         :param button:
         """
         self.__menu.popup(None, button, None, button, 0, Gtk.get_current_event_time())
-
-    def __on_import_menu_item_clicked(self, wiget):
-        """
-        Handles Import context menu item clicked event, imports only if Calibre present
-        :param wiget:
-        """
-        if not os.path.exists("/usr/bin/ebook-convert"):
-            error_dialog = Gtk.MessageDialog(self.__window, 0, Gtk.MessageType.INFO, Gtk.ButtonsType.OK,
-                                             _("Importing is unavailable"))
-            error_dialog.format_secondary_text(_("Importing requires Calibre eBook reader to be installed."))
-            error_dialog.run()
-            error_dialog.destroy()
-        else:
-            # Loads file chooser component
-            file_chooser_component = file_chooser.FileChooserWindow()
-            (response, filename) = file_chooser_component.show_dialog(importing=True)
-
-            # Check if Gtk.Response is OK, means user selected file
-            if response == Gtk.ResponseType.OK:
-                print("File selected: " + filename)  # Print selected file path to console
-                # Load new book
-                self.__window.load_book(filename)
 
     def __on_right_arrow_clicked(self, button):
         """
@@ -200,30 +140,6 @@ class HeaderBarComponent(Gtk.HeaderBar):
         :param button:
         """
         self.__attempt_change_chapter(self.selected_chapter - 1)
-
-    def __on_show_index_clicked(self, button):
-        """
-        Handles show chapters index toggle button clicked event, hides or displays chapters index list
-        :param button:
-        """
-        self.__window.toggle_left_paned()
-
-    def __on_open_clicked(self, button):
-        """
-        Handles Open Document button clicked, shows file selector, saves book data and loads new book
-        :param button:
-        """
-
-        # Loads file chooser component
-        file_chooser_component = file_chooser.FileChooserWindow()
-        (response, filename) = file_chooser_component.show_dialog()
-
-        # Check if Gtk.Response is OK, means user selected file
-        if response == Gtk.ResponseType.OK:
-            print("File selected: " + filename)  # Print selected file path to console
-
-            # Load new book
-            self.__window.load_book(filename)
 
     def __on_activate_current_page_entry(self, widget):
         """
@@ -280,7 +196,15 @@ class HeaderBarComponent(Gtk.HeaderBar):
         """
         self.pages_box.hide()
 
-# We register 1 custom type of signal for this class:
-# 'chapter_changed': emitted when the user choose a different chapter in the header bar.
 GObject.type_register(HeaderBarComponent)
+# We register a bunch of custom signals for this class:
+# emitted when the user choose a different chapter in the header bar.
 GObject.signal_new("chapter_changed", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_INT])
+# emitted when user clicks the 'open' button
+GObject.signal_new("open_clicked", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [])
+# emitted when user clicks 'about' option in menu
+GObject.signal_new("about_clicked", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [])
+# emitted when user clicks 'preferences' option in menu
+GObject.signal_new("preferences_clicked", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [])
+# emitted when 'show navigation' is toggled
+GObject.signal_new("navigation_toggled", HeaderBarComponent, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, [GObject.TYPE_BOOLEAN])
